@@ -68,3 +68,49 @@ where rn <= (
 	select floor(total_callers * 0.20)
 	from total_callers
 )
+
+
+
+
+--- 13. Annoying customers. Customers who call in the last five minutes of a shift are annoying. Find the most active customer who has never been annoying.
+
+-- Step 1: Get shift details for each shift
+with Shift_time as (
+	select 
+		s.Shift_type, 
+		timestamp(s.Shift_date, st.Start_time) as Shift_start,
+		timestamp(s.Shift_date, st.End_time) as Shift_end
+	from Shift as s join Shift_type as st
+		on s.Shift_type = st.Shift_type
+),
+
+-- Step 2: For each call, map whether it falls in the last 5 minutes of its shift
+Mapped as (
+	select 
+		cu.Company_name,
+		case
+			when i.Call_date 
+				between st.Shift_end - interval 5 minute 
+				and st.Shift_end
+			then 1
+			else 0 
+		end as Annoying
+	from Customer as cu 
+	join Caller as ca 
+		on cu.Company_ref = ca.Company_ref
+	join Issue as i 
+		on ca.Caller_id = i.Caller_id
+	join Shift_time as st
+		on i.Call_date >= st.Shift_start
+		and i.Call_date < st.Shift_end
+)
+
+-- Step 3: Return the customer with the largest number of calls who has never called in the last 5 minutes of a shift
+select 
+	Company_name,
+	count(*) as abna
+from Mapped
+group by Company_name
+having Company_name not in (select distinct Company_name from Mapped where Annoying = 1)
+order by abna desc
+limit 1
