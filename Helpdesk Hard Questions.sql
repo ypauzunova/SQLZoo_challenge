@@ -55,7 +55,6 @@ total_callers as (
 	from Caller
 )
 
-
 -- Step 4: Calculate the percentage of issues from the top 20% callers
 select 
 	(sum(cc) * 100.0 / (select total_issues from total_issues)) as t20pc
