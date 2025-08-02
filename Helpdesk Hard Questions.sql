@@ -114,3 +114,32 @@ group by Company_name
 having Company_name not in (select distinct Company_name from Mapped where Annoying = 1)
 order by abna desc
 limit 1
+
+
+
+
+--- 14. Maximal usage. If every caller registered with a customer makes at least one call in one day then that customer has "maximal usage" of the service. List the maximal customers for 2017-08-13.
+
+-- Step 1: Get total number of registered callers per client
+with Registered_callers as (
+	select 
+		cu.Company_name,
+		cu.Company_ref,
+		count(distinct ca.Caller_id) as registered_callers
+	from Customer as cu join Caller as ca
+		on cu.Company_ref = ca.Company_ref
+	group by cu.Company_name, cu.Company_ref)
+
+-- Step 2: For each client, count distinct callers who made a call on 2017-08-13 and return only those clients whose registered-caller count equals their active-caller count 
+select 
+	rc.Company_name, 
+	count(distinct i.Caller_id) as caller_count, 
+	rc.registered_callers 
+from Issue as i 
+	join Caller as ca
+		on i.Caller_id = ca.Caller_id
+	join Registered_callers as rc
+		on rc.Company_ref = ca.Company_ref
+where date(i.Call_date) = '2017-08-13'
+group by rc.Company_name, rc.registered_callers
+having rc.registered_callers = caller_count
