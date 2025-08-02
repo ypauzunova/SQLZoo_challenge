@@ -143,3 +143,72 @@ from Issue as i
 where date(i.Call_date) = '2017-08-13'
 group by rc.Company_name, rc.registered_callers
 having rc.registered_callers = caller_count
+
+
+
+
+--- 15. Consecutive calls occur when an operator deals with two callers within 10 minutes. Find the longest sequence of consecutive calls – give the name of the operator and the first and last call date in the sequence.
+
+-- Step 1: Calculate the gap in minutes to the previous call for each operator 
+with Gap_since_prev_call as (
+	select 
+		Taken_by,
+		Call_date,
+		timestampdiff(
+			minute, 
+			lag(timestamp(Call_date)) 
+				over(partition by Taken_by order by Call_date asc), 
+			timestamp(Call_date)
+		) as Gap
+	from Issue
+),
+
+-- Step 2: Create new sequence flag assuming 10-minute grace 
+Sequence_start as (
+	select 
+		*,
+		case 
+			when Gap > 10 or Gap is null then 1
+			else 0
+		end as sequence_start_flag
+	from Gap_since_prev_call
+),
+
+-- Step 3: Create unique sequence IDs
+Sequence_id as (
+	select 
+		*,
+		concat(
+			Taken_by, '_', 
+			sum(sequence_start_flag) over(partition by Taken_by order by Call_date)
+		) as sequence_id
+	from Sequence_start
+),
+
+-- Step 4: For each call get the first and last call time and total number of the calls in the sequence
+Sequence_data as (
+	select
+		Taken_by,
+		min(Call_date) over(
+			partition by sequence_id 
+			order by Call_date 
+			rows between unbounded preceding and unbounded following
+		) as first_call,
+		max(Call_date) over(
+			partition by sequence_id 
+			order by Call_date 
+			rows between unbounded preceding and unbounded following
+		) as last_call,
+		count(*) over(
+			partition by sequence_id 
+			order by Call_date 
+			rows between unbounded preceding and unbounded following
+		) as calls
+	from Sequence_id
+)
+
+-- Step 5: Filter the sequence with the highest number of calls
+select distinct Taken_by, first_call, last_call, calls
+from Sequence_data
+order by calls desc
+fetch first 1 rows with ties
