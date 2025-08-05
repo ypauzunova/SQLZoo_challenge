@@ -66,3 +66,28 @@ having check_out in (select dt from analysis_dates)
 order by check_out
 
 
+
+
+--- 13. Free rooms? List the rooms that are free on the day 25th Nov 2016.
+
+-- Step 1: Identify rooms that are occupied on 2016-11-25
+with rooms_occupied as (
+	select 
+		room_no, 
+		booking_date, 
+		nights,
+		case 
+			when date('2016-11-25') >= booking_date and date('2016-11-25') < date(booking_date) + interval nights day then 1
+			else 0
+		end as occupied
+	from booking
+	having occupied = 1
+)
+
+-- Step 2: Get free rooms (not occupied)
+select id 
+from room
+where id not in (select room_no from rooms_occupied)
+
+
+
