@@ -91,3 +91,60 @@ where id not in (select room_no from rooms_occupied)
 
 
 
+
+--- 14. Single room for three nights required. A customer wants a single room for three consecutive nights. Find the first available date in December 2016.
+
+-- Step 1: Identify gaps between bookings for single rooms
+-- Use left join to include rooms that have never been booked (if any)
+with single_room_bookings_with_gaps as (
+	select 
+		room_no,
+		booking_date as check_in,		
+		booking_date + interval nights day as check_out,
+		lead(booking_date, 1) over(partition by room_no order by check_out) as next_check_in
+	from room r left join booking b 
+		on r.id = b.room_no 
+	where room_type = 'single'
+),
+
+-- Step 2: Filter available dates from Dec 1 onwards
+-- Assign '2016-12-01' as available_from for: (1) spare capacity already available before Dec 1, or (2) rooms never booked
+available_from_dec_1_onwards as (
+	select  
+		room_no,
+		case 
+			when 
+				check_out <= date('2016-12-01') 
+				or check_out is null
+			then date('2016-12-01')
+			else check_out
+		end as available_from,
+		next_check_in 
+
+	from single_room_bookings_with_gaps
+	where next_check_in is null or next_check_in > '2016-12-01'
+),
+
+-- Step 3: Calculate number of available nights between check-out and next check-in  
+-- If no next_check_in (i.e. open-ended availability), assume the room is free for more than 3 nights, e.g. 100
+-- Remove cases where no availability between bookings
+available_stays_with_length as(
+	select 
+		room_no,
+		available_from,
+		next_check_in,
+		coalesce(
+			datediff(next_check_in, available_from), 100
+		) as available_nights
+	from available_from_dec_1_onwards
+	having available_nights > 0
+)
+
+-- Step 4: Get earliest available start date and room number(s) for a single room with ≥ 3 consecutive nights available in Dec
+select 
+	room_no, 
+	available_from
+from available_stays_with_length 
+where available_nights >= 3
+order by available_from asc
+fetch next 1 row with ties
