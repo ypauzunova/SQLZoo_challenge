@@ -148,3 +148,60 @@ from available_stays_with_length
 where available_nights >= 3
 order by available_from asc
 fetch next 1 row with ties
+
+
+
+
+--- 15. Gross income by week. Money is collected from guests when they leave. 
+--- For each Thursday in November and December 2016, show the total amount of money 
+--- collected from the previous Friday to that day, inclusive.
+
+
+-- Step 1: List each Thursday in November and December 2016 
+with recursive reporting_dates as (
+	select 
+	date ('2016-11-03') as rd
+    union all
+    select rd + interval 7 day
+    from reporting_dates
+    where rd <= date('2016-12-31')
+),
+
+-- Step 2: Get total amount of extras per booking 
+extra_per_booking as (
+	select 
+		booking_id, 
+		sum(amount) as amt_extra 
+	from extra
+	group by booking_id
+),
+
+-- Step 3: Calculate total collected amount per checkout date (room charges + extras)
+amt_total_per_day as (
+	select 
+		b.booking_date + interval b.nights day as check_out,
+		sum(
+			r.amount * b.nights + coalesce(e.amt_extra,0)
+		) as amt_total_daily
+	from booking b left join rate r
+		on b.occupants = r.occupancy 
+		and b. room_type_requested = r. room_type
+	left join extra_per_booking e
+		on b.booking_id = e.booking_id
+	group by 1
+)
+
+-- Step 4: For each Thursday, sum all collections for the last 7 days ended thet Thursday
+select
+	d.rd as week_ended,
+	coalesce(
+		(
+			select sum(a.amt_total_daily) 
+			from amt_total_per_day a
+			where a.check_out between d.rd - interval 6 day and d.rd
+		), 
+		0
+	) as amt_weekly
+from reporting_dates d
+where d.rd <= date('2016-12-31')
+order by week_ended
