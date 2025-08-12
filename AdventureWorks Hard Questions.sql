@@ -61,6 +61,21 @@ left join Product p
 
 
 
+--- 13. Show the best selling item by value.
+
+--- Definition of value: SUM(OrderQty * UnitPrice) across all orders
+--- Granularity: ProductID (each distinct product)
+--- Join note: LEFT JOIN to account solely for ProductIDs present in SalesOrderDetail
+--- 		   (It does NOT include products with no sales)
+select 
+	sod.ProductID, 
+	p.Name, 
+	sum(sod.OrderQty * sod.UnitPrice) as Value
+from SalesOrderDetail sod left join Product p
+	on sod.ProductID = p.ProductID
+group by 1,2
+order by 3 desc
+fetch next 1 rows with ties
 
 
 
