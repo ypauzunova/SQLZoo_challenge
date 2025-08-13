@@ -80,6 +80,46 @@ fetch next 1 rows with ties
 
 
 
+--- 14. Show how many orders are in the following ranges (in $):
+--- 	0-  99
+--- 	100- 999
+---  	1000-9999
+--- 	10000-
+
+-- Definition of Total Value: subtotal + tax + freight for each order
+
+-- Step 1: Create SalesOrderID ¬ TotalValue pairs  
+with order_value as (
+	select 
+		SalesOrderID, 
+	coalesce(SubTotal,0) + coalesce(TaxAmt,0) + coalesce(Freight,0) as TotalValue 
+	from SalesOrderHeader
+), 
+
+-- Step 2: Assign a range_label to each order ensuring no gaps 
+--		   (e.g., values between 99 and 100 are included in the '0-  99' range) 
+value_range as (
+	select * ,
+		case 
+			when TotalValue >= 0 and TotalValue < 100 then '0-  99'
+			when TotalValue >= 100 and TotalValue < 1000 then '100- 999'
+			when TotalValue >= 1000 and TotalValue < 10000 then '1000-9999'
+			else '10000-'
+		end as range_label
+	from order_value
+)
+
+-- Step 3: Summarise by range: number of orders and total value 
+select 
+	range_label as 'RANGE', 
+	count(*) as 'Num Orders', 
+	sum(TotalValue) as 'Total Value'
+from value_range
+group by 1
+
+
+
+
 
 
 
