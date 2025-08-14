@@ -120,6 +120,49 @@ group by 1
 
 
 
+---15. Identify the three most important cities. Show the break down of top level product category against city.
+
+-- Analyse by BillToAddressID (BillTo and ShipTo may differ; we use BillTo)
+-- 'Importance' = gross line revenue =  sod.OrderQty * sod.UnitPrice (ignores discounts/tax/freight)
+
+-- Step 1: Get a datailed breakdown on SalesOrderDetail level by City and top level product category with subtotals by City and City and Category 
+with CityCatSubtotal as (
+	select 
+		a.City, 
+		pc.Name,
+		sum(sod.OrderQty * sod.UnitPrice) over(partition by a.City) as SalesCity,
+		sum(sod.OrderQty * sod.UnitPrice) over(partition by a.City, pc.Name) as SalesCityCat
+	from SalesOrderHeader soh left join Address a
+		on soh.BillToAddressID = a.AddressID
+	left join SalesOrderDetail sod 
+		on soh.SalesOrderID = sod.SalesOrderID
+	left join Product p 
+		on sod.ProductID = p.ProductID
+	left join ProductCategory pc
+		on p.ProductCategoryID = pc.ProductCategoryID
+),
+
+-- Step 2: Top 3 cities by total sales (ties allowed/deterministic tie-break) 
+MostImportantCities as (
+	select distinct 
+		City, 
+		SalesCity 
+	from CityCatSubtotal
+	order by SalesCity desc
+	fetch next 3 rows with ties
+)
+
+-- Step 3: Get the final breakdown
+select distinct
+	City,
+	Name as ProductCategoryName,
+	SalesCityCat as Sales
+from CityCatSubtotal
+where City in (select City from MostImportantCities)
+order by City, Sales desc
+
+
+
 
 
 
