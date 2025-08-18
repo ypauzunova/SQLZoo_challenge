@@ -123,3 +123,86 @@ with semester_weeks as (
 
 -- Step 4: Return final summary table
 select * from summary
+
+
+
+
+--- 13. A one hour staff meeting is to be held between 09:00 and 17:00. 
+---     Events which clash are to be cancelled. 
+---     Identify the hour which will result in the least disruption.
+
+
+-- Assumptions & Definitions: 
+--   - The meeting recurs weekly at the same day and time.  
+--   - It can be scheduled on any day of the week.  
+--   - 'Least disruption' is defined as the smallest number of academic hours lost.  
+--   - If multiple options tie on hours, choose the slot with fewer affected events. 
+
+ 
+-- Step 1: Generate all possible 1-hour start times between 09:00 and 17:00.
+ with recursive all_slots_day as (
+	select 9 as slot_start
+    union all
+    select slot_start + 1
+    from all_slots_day
+    where slot_start < 16
+)
+
+-- Step 2: List all possible 1-hour slots for each week and day of the semester 
+, slots_per_semester as (
+	select distinct w.id as week, e.dow, s.slot_start
+	from week w
+		cross join event e
+		cross join all_slots_day s
+)
+
+-- Step 3: Build timetable of all distinct event occurrences and assign an ID 
+, event_occurence_full as (
+	select 
+		e.id, 
+		t.staff, 
+		o.week, 
+		e.dow, 
+		e.tod, 
+		e.duration,
+		row_number() over(
+			order by t.staff, o.week, e.dow, e.tod, e.duration
+		) as event_occurence_id
+	from event e 
+		join teaches t on e.id = t.event
+		join occurs o on e.id = o.event
+)
+
+-- Step 4: Split 2-hour events into two 1-hour slots, add 1h slot start time 
+, slots_scheduled as (
+	select * , tod as slot_start 
+	from event_occurence_full
+	
+	union all
+	
+	select * , tod + 1 as slot_start 
+	from event_occurence_full
+	where duration = 2
+)
+
+-- Step 5: Count clashes per slot: both total events and total academic hours affected.   
+, clash_counts as (
+	select  
+		a.dow, 
+		a.slot_start, 
+		count(duration) as clash_events, 
+		coalesce (sum(duration),0) clash_hours
+	from slots_per_semester a left join slots_scheduled s
+		on a.week = s.week 
+		and a.dow = s.dow 
+		and a.slot_start = s.slot_start
+	group by a.dow, a.slot_start
+)
+
+-- Step 6: Return the slot causing minimal diruption 
+select * 
+from clash_counts
+order by clash_hours, clash_events
+fetch next 1 row with ties
+
+-- Answer: Schedule the staff meeting at 12pm each Friday
