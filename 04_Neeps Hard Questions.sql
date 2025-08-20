@@ -206,3 +206,99 @@ order by clash_hours, clash_events
 fetch next 1 row with ties
 
 -- Answer: Schedule the staff meeting at 12pm each Friday
+
+
+
+
+--- 14. Find all clashes - include the events which clash and the staff, 
+---     student or rooms that they have in common.
+
+--- Assumption: 
+---             1) Events may have multiple staff members.
+
+--- TO DO: 		Add logic to cover parent IDs for rooms and student groups.
+
+
+-- Step 1: Build a timetable of all event occurences during the semester and assign id.
+with details as (
+	select 
+		a.event, 
+		o.week, 
+		e.dow, 
+		e.tod 								as tod_start, 
+		e.tod + duration 					as tod_end, 
+		t.staff 							as staff_id, 
+		a.student 							as stud_id, 
+		st.parent 							as stud_parent_id, 
+		r.id 								as room_id, 
+		r.parent 							as room_parent_id,
+		-- occurence_id used to ensure no self-joins 
+		row_number() over(order by event)	as occurence_id
+
+	from event e 
+		join occurs o 						on e.id = o.event
+		join teaches t 						on e.id = t.event
+		join staff sf 						on t.staff = sf.id
+		join attends a 						on e.id = a.event
+		join student st 					on a.student = st.id 
+		join room r 						on e.room = r.id
+)
+
+-- Step 2: Identify clashes on staff, room, or student.
+select 
+	d1.week
+	, d1.dow
+	, d1.tod_start 						as tod_start1
+	, d1.tod_end 						as tod_end1
+	, d2.tod_start 						as tod_start2
+	, d2.tod_end 						as tod_end2
+	, d1.occurence_id 					as occurence_id1
+	, d2.occurence_id 					as occurence_id2
+	, d1.event 							as event1
+	, d2.event 							as event2
+	, d1.staff_id 						as staff_id1
+	, d2.staff_id 						as staff_id2
+	, d1.stud_id 						as stud_id1
+	, d2.stud_id 						as stud_id2
+	, d1.stud_parent_id 				as stud_parent_id1
+	, d2.stud_parent_id 				as stud_parent_id2
+	, d1.room_id 						as room_id1
+	, d2.room_id 						as room_id2
+	, d1.room_parent_id 				as room_parent_id1
+	, d2.room_parent_id 				as room_parent_id2
+	
+from details d1 join details d2  
+    
+	-- Avoid self-joins  
+	on d1.occurence_id > d2.occurence_id 
+	
+	-- Must be in the same week and day
+	and d1.week = d2.week 
+	and d1.dow = d2.dow 
+	
+	-- Times overlap
+	and (
+		d2.tod_start >= d1.tod_start and d2.tod_start < d1.tod_end
+		or 
+		d2.tod_end > d1.tod_start and d2.tod_end <= d1.tod_end
+	)
+
+	-- Clash occurs if one of the following holds:
+    and (
+
+		-- Staff double-booked (same staff, different event)
+		d1.staff_id = d2.staff_id and d1.event != d2.event
+
+		-- Rooms double-booked 
+		or (d1.room_id = d2.room_id and d1.event != d2.event)
+		
+		-- Student double-booked 
+		or (d1.stud_id = d2.stud_id and d1.event != d2.event)
+
+	)
+
+order by d1.week, d1.dow, d1.tod_start, d2.tod_start, d1.occurence_id
+
+
+
+
