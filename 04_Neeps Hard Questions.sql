@@ -302,3 +302,68 @@ order by d1.week, d1.dow, d1.tod_start, d2.tod_start, d1.occurence_id
 
 
 
+--- 15. Produce a timetable for a group of full time students for week 1
+
+	
+-- Approach:  
+--   - Select the cohort with the largest total academic hours in the semester, assuming it is full-time.  
+--   - If multiple cohorts tie, select the one that comes first alphabetically. 
+	
+
+-- Step 1: Normalise the attends table to the lowest-level cohort (student.id)  
+--         so that each attendance is mapped consistently.  
+--         In effect, we 'explode' parent-level cohorts into their individual students.
+with attends_clean as (
+	select 
+		a.student, 
+		a.event, 
+		s.id, 
+		s.parent, 
+		coalesce (s.id, a.student) as cohort
+	from attends a left join student s 
+		on a.student = s.parent
+)
+
+-- Step 2: Build a semester-wide timetable for all cohorts
+, timetable_all as (
+	select 
+		ac.cohort, 
+		o.week, 
+		e.dow, 
+		e.tod, 
+		ac.event, 
+		e.kind, 
+		e.duration, 
+		e.room
+	from event e join occurs o
+		on e.id = o.event
+	join attends_clean ac
+		on e.id = ac.event 
+)
+
+-- Step 3: Identify the full-time cohort  
+, ft_cohort as (
+	select 
+		cohort, 
+		sum(duration) as hours_semester
+	from timetable_all
+	group by cohort
+	order by hours_semester desc, cohort
+	limit 1
+)
+
+-- Step 4: Return the timetable for the identified full-time cohort in week 1
+select *
+from timetable_all 
+where cohort = (select cohort from ft_cohort) 
+	and week = 1
+order by 
+	field(dow, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), 
+	tod
+
+
+
+
+
+
+
