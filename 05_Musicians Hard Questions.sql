@@ -101,3 +101,45 @@ select * from (
 
 -- Keep only musicians associated with Glasgow by at least one criterion
 where (LIVES_IN + BORN_IN + PERFORMED_IN + IN_BAND_IN) > 0
+
+
+
+
+--- 15. Jeff Dawn plays in a band with someone who plays in a band 
+---     with Sue Little. Who is it and what are the bands?
+
+
+-- Step 1: Build a simple musician ~ band mapping for reuse. 
+with musician_band as (
+	select 
+	b.band_name 	as band
+	, m.m_name 		as musician
+	from musician m 
+	join performer pfmr 	on m.m_no 			= pfmr.perf_is
+	join plays_in pb 		on pfmr.perf_no 	= pb.player
+	join band b 			on pb.band_id 		= b.band_no
+)
+
+-- Step 2: Self-joion to identify 'shared' band-members
+select distinct
+	mbjd.musician 	as musician
+	, mbjd.band 	as JD_band
+	, mbsl.band		as SL_band
+from musician_band mbjd
+join musician_band mbsl
+	on mbjd.musician = mbsl.musician
+where 
+	-- Bands Jeff is in 
+	mbjd.band in (
+		select band
+		from musician_band
+		where musician = 'Jeff Dawn'
+	)
+	-- Bands Sue is in 
+	and mbsl.band in (
+		select band
+		from musician_band
+		where musician = 'Sue Little'
+	)
+	-- exclude Jeff and Sue
+	and mbjd.musician not in ('Jeff Dawn', 'Sue Little')
