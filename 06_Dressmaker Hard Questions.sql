@@ -89,3 +89,78 @@ order by 1
 
 
 
+
+--- 4. "Big spender of the year" is the customer who spends the most on high value items. 
+---    Identify the "Big spender of the year 2002" if the "high value" threshold is set at £30. 
+---    Also who would it be if the threshold was £20 or £50?
+
+-- Step 1: Compute cost per item as (quantity × material cost) + labour cost.
+with cost_per_item as (
+	select 
+		cust.c_no
+		, cust.c_name
+		, round(g.labour_cost + q.quantity * m.cost, 2) as total_cost
+	from order_line ol join quantities q
+		on ol.ol_style = q.style_q
+		and ol.ol_size = q.size_q
+	join material m
+		on ol.ol_material = m.material_no
+	join garment g 
+		on ol.ol_style = g.style_no
+	left join dress_order do 
+		on ol.order_ref = do.order_no
+	left join jmcust cust
+		on do.cust_no = cust.c_no
+)
+
+-- Step 2: Build a long-format table summarising each customer’s  
+--         total spend on high-value items across the three thresholds. 
+, hv_order_totals_per_customer as (
+	select distinct 
+		c_no
+		, c_name
+		, sum(case when total_cost > 30 then total_cost else 0 end) over(partition by c_no) as total_hv
+		, 'hv_30' as threshold
+	from cost_per_item
+
+	union all 
+
+	select distinct 
+		c_no
+		, c_name
+		, sum(case when total_cost > 20 then total_cost else 0 end) over(partition by c_no) as total_hv
+		, 'hv_20' as threshold
+	from cost_per_item
+
+	union all 
+
+	select distinct 
+		c_no
+		, c_name
+		, sum(case when total_cost > 50 then total_cost else 0 end) over(partition by c_no) as total_hv
+		, 'hv_50' as threshold
+	from cost_per_item
+)
+
+-- Step 3: For each threshold, identify the maximum total high-value spend  
+--         and the corresponding customer(s). 
+select 
+	threshold
+	, c_no
+	, c_name
+	, total_hv 
+
+from (
+	select 
+		*
+		-- determine the maximum spend per customer per threshold
+		, max(total_hv) over(partition by threshold) as max_hv
+	from hv_order_totals_per_customer
+) x 
+
+where total_hv = max_hv
+order by field(threshold, 'hv_30', 'hv_20', 'hv_50') 
+
+
+
+
