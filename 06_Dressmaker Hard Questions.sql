@@ -164,3 +164,40 @@ order by field(threshold, 'hv_30', 'hv_20', 'hv_50')
 
 
 
+--- 5. Who is the fastest at making trousers?
+
+-- Approach:  
+--   - Consider only completed orders (finish_date IS NOT NULL).  
+--   - If a dressmaker has completed multiple trouser orders,  
+--     define 'fastest' based on the lowest average completion time (in days). 
+
+select 
+	d_name as dressmaker_name
+	, days 
+
+from (
+	select 
+		cnst.maker
+		, dm.d_name
+		, g.description
+		-- average completion time in days across all trouser orders
+		, avg (cnst.finish_date - cnst.start_date) as days
+	from construction cnst join order_line ol 
+		on ol.order_ref = cnst.order_ref
+		and ol.line_no = cnst.line_ref
+	join garment g
+		on ol.ol_style = g.style_no 
+	join dressmaker dm 
+		on cnst.maker = dm.d_no
+	where g.description = 'Trousers'
+	and cnst.finish_date is not null
+	group by 1,2,3 
+) x
+
+-- return the fastest (minimum average completion time), with ties if equal
+order by days 
+fetch next 1 row with ties 
+
+
+
+
