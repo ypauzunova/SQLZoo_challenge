@@ -201,3 +201,64 @@ fetch next 1 row with ties
 
 
 
+--- 6. "Employee of the month" is the seamstress who completes the greatest value of clothes. 
+---    Show the "employees of the month" for months in 2002.
+
+-- Approach:
+--   Attribute the entire value of a job to the month of its completion (finish_date).
+
+
+-- Step 1: Compute total value per seamstress per completion month in 2002.
+with name_month_value as (
+	select 
+		cnst.maker 						as dressmaker_id
+		, dm.d_name 					as dressmaker_name
+		, MONTH(cnst.finish_date) 		as awards_month
+		, round(
+			sum(g.labour_cost + q.quantity * m.cost)
+			, 2
+			) 							as total_value
+
+		from order_line ol join quantities q
+			on ol.ol_style = q.style_q
+			and ol.ol_size = q.size_q
+		join material m
+			on ol.ol_material = m.material_no
+		join garment g 
+			on ol.ol_style = g.style_no
+		left join dress_order do 
+			on ol.order_ref = do.order_no
+		join construction cnst
+			on ol.order_ref = cnst.order_ref
+			and ol.line_no = cnst.line_ref
+		join dressmaker dm
+			on cnst.maker = dm.d_no
+	
+	-- filter orders completed in 2002
+	where cnst.finish_date > '2001-12-31'
+		and cnst.finish_date <= '2002-12-31'
+	group by 1,2,3
+)
+
+-- Step 2: Flag monthly leaders (those with the maximum total_value in their month).
+, leaderboard as (
+	select 
+		*,
+		case when total_value = max(total_value) over (partition by awards_month) then 1 
+			else 0 
+		end as leader
+	from name_month_value 
+)
+
+-- Step 3: Return the winner(s) per month (ties allowed).
+select 
+	awards_month, 
+	dressmaker_name, 
+	total_value
+from leaderboard
+where leader = 1
+
+
+
+
+
