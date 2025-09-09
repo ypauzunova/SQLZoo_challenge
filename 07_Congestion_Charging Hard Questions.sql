@@ -76,3 +76,53 @@ left join image i
 	on r.time_left = i.whn
 	and r.registration = i.reg
 
+
+
+
+--- 4) For all 19 cameras - show the position as IN, OUT or INTERNAL 
+---    and the busiest hour for that camera.
+
+-- Approach: 
+--    - If multiple hour bins tie for the maximum traffic for a given camera return multiple rows
+--    - Cameras with no traffic will show NULL for hour_bin
+
+-- Step 1: Count sightings per camera-hour.
+with traffic_per_hour as (
+	select distinct 
+		id
+		,position
+		,hour_bin 
+		,count(*) over(partition by id, hour_bin) as trafic
+	from (
+		select 
+			c.id
+			, coalesce(c.perim, 'INTERNAL') 	as position
+			, i.whn, date_format(i.whn, '%H') 	as hour_bin
+		from camera c 
+		-- left join to keep cameras with zero images 
+		left join image i 
+			on c.id = i.camera
+	) a
+)
+-- Step 2: Rank hourbins by traffic per camera and keep the busiest.  
+select 
+	id
+	, position
+	, hour_bin
+from (
+
+	select 
+		id
+		, position
+		, hour_bin
+		, trafic
+		-- rank to account for ties 
+		, rank() over(partition by id  order by trafic desc) as bin_rank
+	from traffic_per_hour 
+
+) b
+where bin_rank = 1
+order by 1
+
+
+
