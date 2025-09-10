@@ -126,3 +126,60 @@ order by 1
 
 
 
+
+--- 5. Anomalous daily permits. Daily permits should not be issued for non-charging days. 
+---    Find a way to represent charging days. Identify the anomalous daily permits.
+
+-- Approach:
+--   - Charging policy is not explicitly defined in the database.
+--   - Use weekday frequency patterns of permits and camera images to infer charging days.
+--   - Assume customers are less likely to purchase long-term permits on non-charging days.
+
+-- Step 1: add weekday feature for easier grouping (0 = Monday ... 6 = Sunday in MySQL)
+with permit_wd as (
+	select 
+		*
+		, weekday(sDate) as wd
+	from permit
+)
+
+-- Step 2: count Daily permits issued by weekday
+, daily_permit_wd_cc as (
+	select 
+		wd
+		, count(*) as daily_pc
+	from permit_wd
+	where chargeType = 'Daily'
+	group by 1
+	order by 1
+)
+
+-- Step 3: count all permits (any type) by weekday
+, any_permit_wd_cc as (
+	select 
+		wd
+		, count(*) as any_pc
+	from permit_wd
+	group by 1
+	order by 1
+)
+
+-- Step 4: count camera images taken by weekday (sanity check against permit activity)
+, image_wd_cc as (
+	select 
+		weekday(whn)
+		, count(* ) camera_shot_cc
+	from image
+	group by 1
+)
+
+-- Observations:
+--   - Daily permits: wd=4 none issued; wd=3 2 issued; wd=5 2 issued
+--   - Any permits:  wd=4 none issued; wd=3 2 issued; wd=5 5 issued
+--   - Likely non-charging days: wd=3 & wd=4 (Thursday and Friday)
+--   - Camera table includes wd=6 records, which does not contradict permit data
+
+-- Step 5: identify anomalous Daily permits (issued on non-charging days)
+select *
+from permit_wd
+where wd in (3,4) and chargeType = 'Daily'
