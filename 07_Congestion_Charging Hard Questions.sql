@@ -183,3 +183,81 @@ with permit_wd as (
 select *
 from permit_wd
 where wd in (3,4) and chargeType = 'Daily'
+
+
+
+
+
+--- 6. Issuing fines: Vehicles using the zone during the charge period, 
+---    on charging days must be issued with fine notices unless they have 
+---    a permit covering that day. List the name and address of such culprits, 
+---    give the camera and the date and time of the first offence.
+
+-- Assumption: 
+--    - All image timestamps fall within the overall scheme’s charging period.
+--    - Any camera registration counts as use of the zone (i.e. a potential breach). 
+
+-- Step 1: derive permit end dates by charge type
+with permits_days as (
+	select 
+		reg
+		, sDate
+		, case 
+			when p.chargeType = 'Daily' then sDate + interval 1 day
+			when p.chargeType = 'Weekly' then sDate + interval 1 week
+			when p.chargeType = 'Monthly' then sDate + interval 1 month
+			when p.chargeType = 'Annual' then sDate + interval 1 year
+			else null
+		end as eDate
+	from permit p
+)
+
+-- Step 2: label each image event as authorised/unauthorised (authorised = falls within a permit window)
+, authorised as (
+	select 
+		i.camera
+		, i.whn
+		, i.reg
+		, pd.sDate
+		, pd.eDate
+		,case when i.whn between pd.sDate and pd.eDate then 1 else 0 end as auth
+	from image i left join permits_days pd 
+	on i.reg = pd.reg
+)
+
+-- Step 3: keep only unauthorised usage events (no valid permit at the event time)
+, unauthorised as (
+	select 
+		i.camera
+		, i.whn
+		, i.reg
+	from image i join authorised a
+		on i.camera = a.camera 
+		and i.whn = a.whn
+		and i.reg = a.reg
+	where a.auth = 0
+)
+
+-- Step 4: identify each keeper’s earliest unauthorised event
+, rank_offence as (
+	select 
+		k.name
+		, k.address
+		, un.camera
+		, un.whn  
+		, rank() over(partition by k.id order by un.whn asc) as offence_rank
+	from unauthorised un join vehicle v
+		on un.reg = v.id
+	join keeper k 
+		on v.keeper = k.id
+)
+
+-- Step 5: output culprits (first offence only), sorted alphabetically
+select 
+	name
+	, address
+	, camera
+	, whn 		as first_offence_dt
+from rank_offence
+where offence_rank = 1
+order by 1
